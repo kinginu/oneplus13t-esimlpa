@@ -1,6 +1,7 @@
-id=op11_esim
-name=SIMManager
-version=0.1.0
+id=oneplus13t-esimlpa
+name=eSIM LPA for Oneplus 13T
+version=v0.1.0
 versionCode=1
-author=qnnnnez
-description=Add eSIM manager functionalities for OnePlus 11 running ColorOS.
+author=qnnnnez (modified by kinginu)
+description=Add eSIM manager functionalities for OnePlus 13T
+updateJson=https://raw.githubusercontent.com/kinginu/oneplus13t-esimlpa/main/update.json
