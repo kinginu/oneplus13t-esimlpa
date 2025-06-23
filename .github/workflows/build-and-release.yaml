@@ -1,0 +1,103 @@
+name: Build and Release Magisk Module
+
+on:
+  push:
+    branches: [ "main" ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  # --------------------------------------------------
+  # Build
+  # --------------------------------------------------
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      VERSION: ${{ steps.get_version.outputs.VERSION }}
+      MODULE_ZIP_NAME: ${{ steps.set_module_name.outputs.name }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Get version from tag
+        id: get_version
+        if: startsWith(github.ref, 'refs/tags/')
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+
+      - name: Download latest google lpa apk from apkmirror
+        run: |
+          npm install
+          node download-apk.js
+          mkdir -p module/system/system_ext/priv-app/EuiccGoogle
+          mv EuiccGoogle.apk module/system/system_ext/priv-app/EuiccGoogle/
+
+      - name: Build OplusEuicc.apk
+        run: |
+          cd ./OplusEuicc
+          chmod +x ./gradlew
+          ./gradlew build
+          mkdir -p ../module/system/system_ext/priv-app/OplusEuicc/
+          mv ./app/build/outputs/apk/debug/app-debug.apk ../module/system/system_ext/priv-app/OplusEuicc/OplusEuicc.apk
+          cd ..
+
+      - name: Set module zip name
+        id: set_module_name
+        run: |
+          if [[ "${{ startsWith(github.ref, 'refs/tags/') }}" == "true" ]]; then
+            echo "name=Oneplus13t-esimlpa-v${{ steps.get_version.outputs.VERSION }}.zip" >> $GITHUB_OUTPUT
+          else
+            echo "name=Oneplus13t-esimlpa-dev-build.zip" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Zip module
+        run: (cd module && zip -r ../${{ steps.set_module_name.outputs.name }} .)
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: magisk-module-zip
+          path: ${{ steps.set_module_name.outputs.name }}
+
+  # --------------------------------------------------
+  # Release
+  # --------------------------------------------------
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download artifact from build job
+        uses: actions/download-artifact@v4
+        with:
+          name: magisk-module-zip
+
+      - name: List files
+        run: ls -R
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ needs.build.outputs.MODULE_ZIP_NAME }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
